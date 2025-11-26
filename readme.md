@@ -36,36 +36,142 @@ A ROS2 node implementing safety functionalities for the Robile robot using a beh
 - **Output Topics**:
   - `/cmd_vel` (geometry_msgs/Twist) - Velocity commands for robot control
 
-## Prerequisites
+## Behavior Tree Structure
+```
+root (Parallel)
+├── Topics2BB (Sequence)
+│ ├── BatteryStatus2bb → Writes: battery, battery_low_warning
+│ └── LaserScan2bb → Writes: laser_scan, collision_warning, min_distance
+└── Priorities (Selector)
+├── CollisionPriority (Sequence)
+│ ├── CollisionDetected? (Condition)
+│ └── StopMotion (Emergency Stop)
+├── BatteryPriority (Sequence)
+│ ├── BatteryLow? (Condition)
+│ └── Rotate (Rotation Action)
+└── Idle (Running - Default)
+```
+
+## Safety Behaviors
+
+| State | Trigger | Action | Priority |
+|-------|---------|--------|----------|
+| 🚨 COLLISION_AVOIDANCE | Obstacle < 1.0m | Emergency stop | Highest |
+| 🔋 BATTERY_CHARGING | Battery < 30% | Rotate @ 1.0 rad/s | Medium |
+| 🟢 NORMAL_OPERATION | No issues | Idle | Default |
+
+# 📋 Prerequisites
 
 - ROS2 Humble (or compatible distribution)
-- `py_trees` and `py_trees_ros` packages
-- `geometry_msgs`, `std_msgs`, `sensor_msgs` ROS2 message packages
-
-## Installation
-
-1. Clone or place the `safety_bt.py` file in your ROS2 workspace
-2. Ensure it's part of the `robile_safety` package
-3. Build your workspace:
+- Python 3.8+
+## Required ROS2 packages:
   ```bash
-   colcon build --packages-select robile_safety
+  sudo apt install ros-${ROS_DISTRO}-py-trees-ros \
+                   ros-${ROS_DISTRO}-py-trees \
+                   ros-${ROS_DISTRO}-geometry-msgs \
+                   ros-${ROS_DISTRO}-std-msgs \
+                   ros-${ROS_DISTRO}-sensor-msgs
   ```
-# Build the package
-  ```bash
+## Install py_trees and related packages
+```bash
+sudo apt update
+sudo apt install ros-${ROS_DISTRO}-py-trees-ros ros-${ROS_DISTRO}-py-trees
+```
+
+## Verify installation
+```bash
+python3 -c "import py_trees, py_trees_ros; print('Dependencies OK')"
+```
+
+# Installation
+
+Clone or place the `robile_safety` file in your ROS2 workspace src
+```bash
+git clone https://github.com/SuhailRafi/robile_safety.git
+```
+
+Build the package
+```bash
 cd ~/ros2_ws
 colcon build --packages-select robile_safety
 source install/setup.bash
-  ```
+```
 
-# Run the safety node
-  ```bash
+## Run the safety node
+```bash
 ros2 run robile_safety safety_bt
-  ```
+```
 
-# Run the launch file instead
-   ```bash
+## You Can Run the launch file instead
+```bash
 ros2 launch robile_gazebo gazebo_4_wheel.launch.py
 ```
+## In another terminal, monitor the state
+```bash
+ros2 topic echo /battery_voltage
+ros2 topic echo /scan
+
+# # Normal battery
+ros2 topic pub /battery_voltage std_msgs/Float32 "data: 45.0" -r 1
+
+# Low battery (triggers rotation)
+ros2 topic pub /battery_voltage std_msgs/Float32 "data: 25.0" -r 1
+```
+# 🔍 Monitoring
+## Node Status
+```bash
+ros2 node list
+ros2 node info /safety_bt
+```
+## Monitor commands
+```bash
+ros2 topic echo /cmd_vel
+```
+## Monitor inputs
+```bash
+ros2 topic echo /battery_voltage
+ros2 topic echo /scan
+```
+## Check frequencies
+```bash
+ros2 topic hz /battery_voltage
+ros2 topic hz /scan
+```
+
+## Output Color Coding
+
+| Color | State | Meaning |
+|-------|-------|---------|
+| 🟢 Green | NORMAL_OPERATION | All systems normal |
+| 🟡 Yellow | BATTERY_CHARGING | Low battery response active |
+| 🔴 Red | COLLISION_AVOIDANCE | Emergency stop active |
+| ⚫ Gray | UNKNOWN | Initial/unknown state |
+
+## Understanding the Output
+
+- **Tick Counter**: Increments every 100ms (configurable)
+- **Time**: Seconds since node startup
+- **Battery Status**: 🟢 = normal, 🟡 = low, 🔴 = critical
+- **Obstacle Status**: 🟢 = safe, 🟡 = warning, 🔴 = danger
+- **State Transitions**: Highlighted with border for visibility
+
+The output is designed to be easily readable in real-time while providing comprehensive debugging information when needed.
+
+# Configuration Guide
+
+## Adjustable Parameters
+
+The Robile Safety Behaviour Tree can be customized through various parameters to match your specific hardware and safety requirements.
+
+### Quick Reference Table
+
+| Parameter | Class | Default Value | Description | Safe Range |
+|-----------|-------|---------------|-------------|------------|
+| Battery Threshold | `BatteryStatus2bb` | 30.0% | Low battery warning level | 10.0% - 50.0% |
+| Safe Distance | `LaserScan2bb` | 1.00m | Minimum obstacle distance | 0.5m - 5.0m |
+| Rotation Speed | `Rotate` | 1.0 rad/s | Angular velocity for low battery | 0.1 - 2.0 rad/s |
+| Tick Frequency | `main` | 100ms | Behavior tree update period | 50ms - 500ms |
+
 
 
 # Robile Safety State Machine (SMACH)
