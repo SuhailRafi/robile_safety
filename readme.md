@@ -90,22 +90,22 @@ Clone or place the `robile_safety` file in your ROS2 workspace src
 git clone https://github.com/SuhailRafi/robile_safety.git
 ```
 
-Build the package
+## Build the package
 ```bash
 cd ~/ros2_ws
 colcon build --packages-select robile_safety
 source install/setup.bash
 ```
+## Start the Robile Simulation
+
+Follow your existing guide to launch the Robile robot in Gazebo simulation.
 
 ## Run the safety node
+
 ```bash
 ros2 run robile_safety safety_bt
 ```
 
-## You Can Run the launch file instead
-```bash
-ros2 launch robile_gazebo gazebo_4_wheel.launch.py
-```
 ## In another terminal, monitor the state
 ```bash
 ros2 topic echo /battery_voltage
