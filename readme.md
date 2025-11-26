@@ -47,16 +47,22 @@ A ROS2 node implementing safety functionalities for the Robile robot using a beh
 1. Clone or place the `safety_bt.py` file in your ROS2 workspace
 2. Ensure it's part of the `robile_safety` package
 3. Build your workspace:
-   ```bash
+  ```bash
    colcon build --packages-select robile_safety
-
+  ```
 # Build the package
+  ```bash
 cd ~/ros2_ws
 colcon build --packages-select robile_safety
 source install/setup.bash
+  ```
 
 # Run the safety node
+  ```bash
 ros2 run robile_safety safety_bt
+  ```
 
-# Run the launch file intead
+# Run the launch file instead
+   ```bash
 ros2 launch robile_gazebo gazebo_4_wheel.launch.py
+```
