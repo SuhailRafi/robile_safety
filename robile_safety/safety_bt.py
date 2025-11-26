@@ -1,15 +1,20 @@
 ### Implement the safety functionalities for the Robile by implementing all
 ### required behaviours here. Feel free to define additional behaviours if necessary
 
-import rclpy
-import py_trees as pt
-import py_trees_ros as ptr
-from geometry_msgs.msg import Twist
-from std_msgs.msg import Float32
-from sensor_msgs.msg import LaserScan
-from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
 import math
+import operator
+import sys
 import time
+
+import py_trees as pt
+import py_trees.console as console
+import py_trees_ros as ptr
+import rclpy
+from geometry_msgs.msg import Twist
+from rclpy.qos import QoSHistoryPolicy, QoSProfile, QoSReliabilityPolicy
+from sensor_msgs.msg import LaserScan
+from std_msgs.msg import Float32
+
 
 class Rotate(pt.behaviour.Behaviour):
     """Rotates the robot about the z-axis 
@@ -190,43 +195,44 @@ class LaserScan2bb(ptr.subscribers.ToBlackboard):
         self.blackboard.min_distance = float('inf')
 
     def update(self):
-        # TODO: impletment the update function to check the laser scan data and update the blackboard variable
-        # YOUR CODE HERE
         status = super().update()
         
         if status != pt.common.Status.RUNNING:
             laser_data = self.blackboard.laser_scan
             
+            self.logger.info(f"📡 [LASER] Raw laser data: {laser_data}")
+            
             if laser_data is not None:
-                min_distance = float('inf')
-                for distance in laser_data:
-                    if not math.isinf(distance) and not math.isnan(distance) and distance > 0: min_distance = min(min_distance, distance)
-                
-                # If we found valid distances, check for collision
-                if min_distance != float('inf'):
-                    self.blackboard.min_distance = min_distance
-                    self.blackboard.collision_warning = min_distance < self.safe_range
+                if len(laser_data) > 0:
+                    min_distance = float('inf')
+                    valid_distances = 0
                     
-                    if self.blackboard.collision_warning: self.logger.warning(f"🚨 [LASER] COLLISION WARNING: {min_distance:.2f}m < {self.safe_range}m")
-                    else: self.logger.info(f"📏 [LASER] Clear: {min_distance:.2f}m")
+                    for distance in laser_data:
+                        if not math.isinf(distance) and not math.isnan(distance) and distance > 0:
+                            min_distance = min(min_distance, distance)
+                            valid_distances += 1
+                    
+                    self.logger.info(f"📡 [LASER] Valid distances found: {valid_distances}/{len(laser_data)}")
+                    
+                    if min_distance != float('inf'):
+                        self.blackboard.min_distance = min_distance
+                        self.blackboard.collision_warning = min_distance < self.safe_range
+                        
+                        if self.blackboard.collision_warning:
+                            self.logger.warning(f"🚨 [LASER] COLLISION WARNING: {min_distance:.2f}m < {self.safe_range}m")
+                        else:
+                            self.logger.info(f"📏 [LASER] Clear: {min_distance:.2f}m")
+                    else:
+                        self.blackboard.min_distance = float('inf')
+                        self.blackboard.collision_warning = False
+                        self.logger.warning("📡 [LASER] No valid distance measurements found!")
                 else:
-                    self.blackboard.min_distance = float('inf')
-                    self.blackboard.collision_warning = False
+                    self.logger.warning("📡 [LASER] Empty laser scan data received!")
+            else:
+                self.logger.warning("📡 [LASER] No laser scan data available on blackboard!")
             
             return pt.common.Status.SUCCESS
         return status
-    
-
-### Implement a behaviour tree using your previously implemented behaviours here
-
-import py_trees as pt
-import py_trees_ros as ptr
-import operator
-
-import py_trees.console as console
-import rclpy
-import sys
-import time
 
 class StateMonitor:
     """Monitors and logs behaviour tree state changes with clean output"""
@@ -323,7 +329,7 @@ class StateMonitor:
                   f"Time: {time.time() - self.start_time:.1f}s | "
                   f"Tick: {self.tick_count}", end="", flush=True)
                   
-        except Exception as e:
+        except Exception:
             print(f"\r📊 CURRENT STATE: {self.current_state} | "
                   f"Data: ❌ | "
                   f"Time: {time.time() - self.start_time:.1f}s | "
@@ -354,8 +360,9 @@ def create_root() -> pt.behaviour.Behaviour:
     root = pt.composites.Parallel(name="root",
                                   policy=pt.common.ParallelPolicy.SuccessOnAll(synchronise=False))    
 
-    ### we create a sequence node called "Topics2BB" and a selector node called "Priorities"
-    topics2BB = pt.composites.Sequence("Topics2BB", memory=False)
+    ### we create a parallel node called "Topics2BB" and a selector node called "Priorities"
+    topics2BB = pt.composites.Parallel(name="Topics2BB",
+                                  policy=pt.common.ParallelPolicy.SuccessOnAll(synchronise=False))  #"Topics2BB", memory=False)
     priorities = pt.composites.Selector("Priorities", memory=False)
 
     ### we create an "Idle" node, which is a running node to keep the robot idle
@@ -370,19 +377,11 @@ def create_root() -> pt.behaviour.Behaviour:
 
     HINT: Some behaviours from pt.behaviours may be useful to use as well.
     """
+    # Create rotate action for low battery
+    rotate_action = Rotate(name="RotateOnLowBattery", ang_vel=2.0)
 
-    # YOUR CODE HERE
-    # Create battery monitoring branch
-    battery_monitor = pt.composites.Sequence("BatteryMonitor", memory=False)
-    battery_check = BatteryStatus2bb(name="CheckBattery", threshold=30.0)
-    rotate_action = Rotate(name="RotateOnLowBattery", ang_vel=1.0)
-    battery_monitor.add_children([battery_check, rotate_action])
-
-    # Create collision avoidance branch
-    collision_monitor = pt.composites.Sequence("CollisionMonitor", memory=False)
-    laser_check = LaserScan2bb(name="CheckLaser", safe_range=1.00)
+    # Create stop action for collision avoidance
     stop_action = StopMotion(name="StopOnCollision")
-    collision_monitor.add_children([laser_check, stop_action])
 
     # Create condition checks for the priorities
     battery_condition = pt.behaviours.CheckBlackboardVariableValue(
@@ -405,10 +404,10 @@ def create_root() -> pt.behaviour.Behaviour:
 
     # Create priority branches
     collision_branch = pt.composites.Sequence("CollisionPriority", memory=False)
-    collision_branch.add_children([collision_condition, collision_monitor])
+    collision_branch.add_children([collision_condition, stop_action])
 
     battery_branch = pt.composites.Sequence("BatteryPriority", memory=False)
-    battery_branch.add_children([battery_condition, battery_monitor])
+    battery_branch.add_children([battery_condition, rotate_action])
 
     # TODO: construct the behaviour tree structure using the nodes and behaviours defined above
     # HINT: for reference, the sample tree structure in the README.md file might be useful
