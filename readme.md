@@ -29,6 +29,33 @@
 - [Configuration Guide](#configuration-guide)
   - [Adjustable Parameters](#adjustable-parameters)
     - [Quick Reference Table](#quick-reference-table)
+- [🧪 Testing](#-testing)
+  - [Test Structure](#test-structure)
+  - [Running Tests](#running-tests)
+    - [Using colcon (recommended for ROS2)](#using-colcon-recommended-for-ros2)
+    - [Using pytest directly](#using-pytest-directly)
+    - [Run specific test file](#run-specific-test-file)
+    - [Run with coverage](#run-with-coverage)
+  - [Test Suites](#test-suites)
+    - [Behaviour Tests](#behaviour-tests)
+    - [Structure Tests](#structure-tests)
+  - [Test Coverage Details](#test-coverage-details)
+    - [BatteryStatus2bb Tests](#batterystatus2bb-tests)
+    - [LaserScan2bb Tests](#laserscan2bb-tests)
+    - [Rotate Tests](#rotate-tests)
+    - [StopMotion Tests](#stopmotion-tests)
+    - [StateMonitor Tests](#statemonitor-tests)
+    - [Tree Structure Tests](#tree-structure-tests)
+- [🔄 Continuous Integration](#-continuous-integration)
+  - [CI Workflow](#ci-workflow)
+  - [Triggering CI](#triggering-ci)
+    - [Automatic Triggers](#automatic-triggers)
+    - [Manual Trigger](#manual-trigger)
+  - [CI Pipeline Steps](#ci-pipeline-steps)
+  - [CI Environment](#ci-environment)
+  - [CI Configuration File](#ci-configuration-file)
+  - [Viewing CI Results](#viewing-ci-results)
+  - [Adding CI Badge to Repository](#adding-ci-badge-to-repository)
 - [Robile Safety State Machine (SMACH)](#robile-safety-state-machine-smach)
   - [Overview](#overview)
   - [State Machine Architecture](#state-machine-architecture)
@@ -109,11 +136,11 @@ root (Parallel)
 
 ## Safety Behaviors
 
-| State | Trigger | Action | Priority |
-|-------|---------|--------|----------|
-| 🚨 COLLISION_AVOIDANCE | Obstacle < 1.0m | Emergency stop | Highest |
-| 🔋 BATTERY_CHARGING | Battery < 30% | Rotate @ 1.0 rad/s | Medium |
-| 🟢 NORMAL_OPERATION | No issues | Idle | Default |
+| State                 | Trigger         | Action             | Priority |
+| --------------------- | --------------- | ------------------ | -------- |
+| 🚨 COLLISION_AVOIDANCE | Obstacle < 1.0m | Emergency stop     | Highest  |
+| 🔋 BATTERY_CHARGING    | Battery < 30%   | Rotate @ 1.0 rad/s | Medium   |
+| 🟢 NORMAL_OPERATION    | No issues       | Idle               | Default  |
 
 # 📋 Prerequisites
 
@@ -195,12 +222,12 @@ ros2 topic hz /scan
 
 ## Output Color Coding
 
-| Color | State | Meaning |
-|-------|-------|---------|
-| 🟢 Green | NORMAL_OPERATION | All systems normal |
-| 🟡 Yellow | BATTERY_CHARGING | Low battery response active |
-| 🔴 Red | COLLISION_AVOIDANCE | Emergency stop active |
-| ⚫ Gray | UNKNOWN | Initial/unknown state |
+| Color    | State               | Meaning                     |
+| -------- | ------------------- | --------------------------- |
+| 🟢 Green  | NORMAL_OPERATION    | All systems normal          |
+| 🟡 Yellow | BATTERY_CHARGING    | Low battery response active |
+| 🔴 Red    | COLLISION_AVOIDANCE | Emergency stop active       |
+| ⚫ Gray   | UNKNOWN             | Initial/unknown state       |
 
 ## Understanding the Output
 
@@ -220,12 +247,182 @@ The Robile Safety Behaviour Tree can be customized through various parameters to
 
 ### Quick Reference Table
 
-| Parameter | Class | Default Value | Description | Safe Range |
-|-----------|-------|---------------|-------------|------------|
-| Battery Threshold | `BatteryStatus2bb` | 30.0% | Low battery warning level | 10.0% - 50.0% |
-| Safe Distance | `LaserScan2bb` | 1.00m | Minimum obstacle distance | 0.5m - 5.0m |
-| Rotation Speed | `Rotate` | 1.0 rad/s | Angular velocity for low battery | 0.1 - 2.0 rad/s |
-| Tick Frequency | `main` | 100ms | Behavior tree update period | 50ms - 500ms |
+| Parameter         | Class              | Default Value | Description                      | Safe Range      |
+| ----------------- | ------------------ | ------------- | -------------------------------- | --------------- |
+| Battery Threshold | `BatteryStatus2bb` | 30.0%         | Low battery warning level        | 10.0% - 50.0%   |
+| Safe Distance     | `LaserScan2bb`     | 1.00m         | Minimum obstacle distance        | 0.5m - 5.0m     |
+| Rotation Speed    | `Rotate`           | 1.0 rad/s     | Angular velocity for low battery | 0.1 - 2.0 rad/s |
+| Tick Frequency    | `main`             | 100ms         | Behavior tree update period      | 50ms - 500ms    |
+
+# 🧪 Testing
+
+The package includes a comprehensive test suite to validate all behaviour tree components and ensure safety-critical functionality works correctly.
+
+## Test Structure
+
+```
+test/
+├── test_behaviours/          # Unit tests for individual behaviours
+│   ├── __init__.py
+│   ├── test_battery_status.py    # BatteryStatus2bb behaviour tests
+│   ├── test_laser_scan.py        # LaserScan2bb behaviour tests
+│   ├── test_rotate.py            # Rotate behaviour tests
+│   ├── test_state_monitor.py     # StateMonitor tests
+│   └── test_stop_motion.py       # StopMotion behaviour tests
+└── test_structure/           # Integration tests for tree structure
+    ├── __init__.py
+    └── test_tree_structure.py    # Behavior tree structure validation
+```
+
+## Running Tests
+
+### Using colcon (recommended for ROS2)
+```bash
+cd ~/ros2_ws
+colcon build --packages-select robile_safety
+colcon test --packages-select robile_safety --event-handlers console_direct+
+colcon test-result --verbose
+```
+
+### Using pytest directly
+```bash
+cd ~/ros2_ws/src/robile_safety
+pytest test/ -v
+```
+
+### Run specific test file
+```bash
+pytest test/test_behaviours/test_battery_status.py -v
+```
+
+### Run with coverage
+```bash
+pytest test/ -v --cov=robile_safety --cov-report=html
+```
+
+## Test Suites
+
+### Behaviour Tests
+
+| Test File | Behaviour | Tests Covered |
+|-----------|-----------|---------------|
+| `test_battery_status.py` | `BatteryStatus2bb` | Initialization, threshold logic, blackboard persistence, warning states |
+| `test_laser_scan.py` | `LaserScan2bb` | Scan processing, collision detection, NaN/infinity handling, edge cases |
+| `test_rotate.py` | `Rotate` | Setup, update cycle, velocity publishing, termination |
+| `test_stop_motion.py` | `StopMotion` | Emergency stop, zero velocity publishing, topic configuration |
+| `test_state_monitor.py` | `StateMonitor` | State determination, transitions, history tracking, color coding |
+
+### Structure Tests
+
+| Test File | Tests Covered |
+|-----------|---------------|
+| `test_tree_structure.py` | Tree creation, root structure, Topics2BB branch, Priorities branch, collision/battery priority ordering, visualization |
+
+## Test Coverage Details
+
+### BatteryStatus2bb Tests
+- ✅ Initialization with default and custom thresholds
+- ✅ Topic name configuration
+- ✅ Battery warning logic with parametrized levels (0%, 25%, 29.9%, 30%, 30.1%, 50%, 100%)
+- ✅ Parent update status handling (SUCCESS, RUNNING, FAILURE)
+- ✅ Blackboard value persistence
+
+### LaserScan2bb Tests
+- ✅ Initialization and safe range configuration
+- ✅ Collision detection with various distance arrays
+- ✅ Handling of `inf`, `NaN`, and negative values
+- ✅ Empty scan handling
+- ✅ Minimum distance calculation
+
+### Rotate Tests
+- ✅ Behaviour initialization with angular velocity
+- ✅ Publisher setup with ROS2 node
+- ✅ Twist message publishing during update
+- ✅ Zero velocity on termination
+- ✅ Error handling for missing node/publisher
+
+### StopMotion Tests
+- ✅ Initialization with default and custom topics
+- ✅ Publisher setup
+- ✅ All velocity components set to zero
+- ✅ Proper Twist message generation
+- ✅ Graceful termination
+
+### StateMonitor Tests
+- ✅ State determination (NORMAL, COLLISION, BATTERY, UNKNOWN)
+- ✅ Priority handling (collision > battery)
+- ✅ State change detection and history
+- ✅ Color code generation for terminal output
+- ✅ Exception handling for missing blackboard values
+
+### Tree Structure Tests
+- ✅ Root node creation as Parallel composite
+- ✅ Topics2BB branch with BatteryStatus2bb and LaserScan2bb
+- ✅ Priorities branch as Selector with correct ordering
+- ✅ CollisionPriority sequence with condition and StopMotion
+- ✅ BatteryPriority sequence with condition and Rotate
+- ✅ Idle behaviour as default fallback
+- ✅ Tree visualization generation
+
+# 🔄 Continuous Integration
+
+This package uses GitHub Actions for automated testing on every push and pull request.
+
+## CI Workflow
+
+The CI pipeline is defined in `.github/workflows/ros2_ci.yml` and runs on:
+- **Push** to `main` branch
+- **Pull requests** targeting `main` branch
+- **Manual trigger** via workflow dispatch
+
+## Triggering CI
+
+### Automatic Triggers
+- Push commits to `main` branch
+- Open/update pull requests to `main`
+
+### Manual Trigger
+1. Go to the repository's **Actions** tab on GitHub
+2. Select **ROS2 CI** workflow
+3. Click **Run workflow**
+
+## CI Pipeline Steps
+
+| Step | Description |
+|------|-------------|
+| **Checkout** | Clone the repository using `actions/checkout@v4` |
+| **Install Tools** | Install `rosdep` and `colcon` build tools |
+| **Install Dependencies** | Run `rosdep install` to install ROS2 package dependencies |
+| **Build** | Build the package with `colcon build --packages-select robile_safety` |
+| **Test** | Run tests with `colcon test` and output results |
+
+## CI Environment
+
+- **Runner**: Ubuntu 22.04
+- **Container**: `ros:humble-ros-base` Docker image
+- **ROS Distribution**: Humble Hawksbill
+
+## CI Configuration File
+
+The workflow is defined in `.github/workflows/ros2_ci.yml`. Key configuration:
+
+- **Container**: Uses official `ros:humble-ros-base` Docker image for consistent builds
+- **Dependencies**: Managed via `rosdep` for automatic resolution
+- **Build System**: Uses `colcon` for ROS2 package building and testing
+
+## Viewing CI Results
+
+1. Navigate to the **Actions** tab in the GitHub repository
+2. Select a workflow run to view detailed logs
+3. Check the **Run tests with colcon** step for test output
+4. View `colcon test-result --verbose` output for detailed test results
+
+## Adding CI Badge to Repository
+
+Add this badge to your README to show CI status:
+```markdown
+![ROS2 CI](https://github.com/SuhailRafi/robile_safety/actions/workflows/ros2_ci.yml/badge.svg)
+```
 
 
 

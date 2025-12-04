@@ -1,0 +1,44 @@
+name: ROS2 CI
+
+on:
+    push:
+        branches: [main]
+    pull_request:
+        branches: [main]
+    workflow_dispatch: # Add this line
+
+jobs:
+    test:
+        runs-on: ubuntu-22.04
+        container:
+            image: ros:humble-ros-base
+
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
+
+            - name: Install rosdep and colcon
+              run: |
+                  apt-get update
+                  apt-get install -y python3-rosdep python3-colcon-common-extensions
+                  rosdep init || true
+                  rosdep update
+
+            - name: Install dependencies via rosdep
+              run: |
+                  source /opt/ros/humble/setup.bash
+                  rosdep install --from-paths . --ignore-src -r -y
+              shell: bash
+
+            - name: Build package with colcon
+              shell: bash
+              run: |
+                  source /opt/ros/humble/setup.bash
+                  colcon build --packages-select robile_safety
+
+            - name: Run tests with colcon
+              shell: bash
+              run: |
+                  source /opt/ros/humble/setup.bash
+                  colcon test --packages-select robile_safety --event-handlers console_direct+ 2>&1
+                  colcon test-result --verbose

@@ -1,0 +1,20 @@
+# Minimal pyproject.toml for setuptools 59.6 (ROS2 Humble)
+# Most configuration is in setup.cfg for compatibility
+
+[build-system]
+requires = ["setuptools>=59.6", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+testpaths = ["test"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
+
+[tool.coverage.run]
+source = ["robile_safety"]
+omit = ["test/*"]
+
+[tool.coverage.report]
+exclude_lines = ["pragma: no cover", "if __name__ == .__main__.:"]
